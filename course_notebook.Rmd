@@ -1,0 +1,206 @@
+```{r}
+#libs
+library("ggplot2") 
+library("ggpubr")  
+library("nortest")
+library("outliers")
+library("EnvStats")
+library("moments")
+library("tseries")
+```
+
+```{r}
+input_table <- read.table(file = paste0(getwd(),"/input.txt"), header = TRUE, sep = " ")
+```
+
+```{r}
+#input data plot
+ggplot(data=input_table,aes(x=year,y=temperature)) +
+  geom_line(size=1) +
+  geom_point(size=3)
+```
+
+```{r}
+#descriptive statistics
+temp_mean <- mean(input_table$temperature)
+temp_median <- median(input_table$temperature)
+temp_dispersion <- var(input_table$temperature)
+temp_standart_deviation <- sd(input_table$temperature)
+temp_min_value <- min(input_table$temperature)
+temp_max_value <- max(input_table$temperature)
+temp_standart_mean_error <- sd(input_table$temperature)/sqrt(length(input_table$temperature))
+temp_quantiles <- quantile(input_table$temperature)
+temp_first_quntiles <- temp_quantiles[2]
+temp_last_quantil <- temp_quantiles[4]
+temp_interquantil_range <- IQR(input_table$temperature)
+temp_variation_coef = (temp_standart_deviation / temp_mean[1]) * 100
+temperatyre_assymetric_coef = skewness(input_table$temperature)
+temperatyre_ecesss = (kurtosis(input_table$temperature) - 3)
+
+
+
+```
+
+```{r}
+print(c('дисперсия', temp_dispersion))
+print(c('коэффициент вариации', temp_variation_coef))
+print(c('коэффициент эксцесса', temperatyre_ecesss))
+print(c('коэффициент ассиметрии', temperatyre_assymetric_coef))
+
+```
+
+
+```{r}
+#histogram + norm
+ggplot(data = input_table, aes(x=temperature)) + 
+  geom_histogram(aes(y = ..density..),binwidth = 1.4, fill = "azure2", color = "black") + 
+  stat_function(fun = dnorm, geom="line",
+                args = list(mean = mean(input_table$temperature, na.rm = TRUE), 
+                            sd = sd(input_table$temperature, na.rm = TRUE)), 
+                colour = 'red', size = 1.4)
+```
+
+
+```{r}
+#density + norm
+ggplot(data = input_table, aes(x=temperature)) + 
+  geom_density( size = 1.2, color = "red") +
+  stat_function(fun = dnorm, geom="line", linetype=2,
+                args = list(mean = mean(input_table$temperature, na.rm = TRUE), 
+                            sd = sd(input_table$temperature, na.rm = TRUE)), 
+                colour = 'black', size = 1.4)
+```
+```{r}
+temp_third_order_moment = 0
+for(temp in input_table$temperature)
+  temp_third_order_moment = temp_third_order_moment + ((temp - temp_mean)^3)
+temp_third_order_moment = temp_third_order_moment / length(input_table$temperature)
+temp_asymmetry = (temp_third_order_moment / (temp_standart_deviation ^3))
+
+temp_four_order_moment = 0
+for(temp in input_table$temperature)
+  temp_four_order_moment = temp_four_order_moment + ((temp - temp_mean)^4)
+temp_four_order_moment = temp_four_order_moment / length(input_table$temperature)
+temp_excess = (temp_four_order_moment / (temp_standart_deviation ^ 4)) - 3
+```
+
+```{r}
+#qq-plot
+ggqqplot(input_table$temperature, ggtheme=theme_bw())
+```
+
+
+```{r}
+#тест на нормальность
+shapiro.test(input_table$temperature)
+pearson.test(input_table$temperature)
+cvm.test(input_table$temperature)
+```
+```{r}
+#тесты на наличие выбросов
+grubbs.test(input_table$temperature)
+grubbs.test(input_table$temperature, opposite = TRUE)
+rosh_test <- rosnerTest(input_table$temperature,k = 3)
+rosh_test
+```
+```{r}
+#ящик с усами
+boxplot(input_table$temperature, col = "azure2")
+```
+
+
+```{r}
+#исходные данные + линейный тренд
+ggplot(data = input_table, aes(x=year, y=temperature)) + 
+  geom_point(size=3) + 
+  geom_smooth(method = "lm", se = FALSE)
+```
+```{r}
+#коэфициент корреляции + значимость коэффициента корреляции
+temp_cor_coef = cor(input_table$year, input_table$temperature)
+cor.test(input_table$year, input_table$temperature)
+```
+```{r}
+#Student coef
+wt = temp_cor_coef * sqrt(length(input_table$temperature))/sqrt(1 - temp_cor_coef^2)
+adf.test(input_table$temperature, alternative = "stationary")
+```
+```{r}
+#lineral regression
+regression_table = data.table::data.table(arg = 0:(length(input_table$temperature)-1), temperature = input_table$temperature)
+regression <- lm(temperature ~ arg, regression_table)
+#summary(regression)
+print('коэффициенты линейной регрессии')
+print(regression$coefficients)
+```
+```{r}
+lag_length <- round(length(input_table$temperature) * 2 / 3)
+```
+
+
+```{r}
+#drift
+drift <- function(h, temperatureArray) {
+  startArray = temperatureArray[(h+1):length(temperatureArray)];
+  endArray =  temperatureArray[1:(length(temperatureArray) - h)];
+  return(mean((startArray - endArray)))
+}
+
+driftTable = data.table::data.table(lag = 0:(lag_length - 1), drift = rep(0, lag_length))
+for(arg in driftTable$lag) {
+  driftTable$drift[arg + 1] = drift(arg, input_table$temperature);
+}
+
+ggplot(data = driftTable, aes(x = lag, y=drift)) + geom_line(size = 1.4, color="black");
+```
+
+```{r}
+#тесты стационарность
+adf.test(input_table$temperature)
+```
+```{r}
+#выборочная ковариационная функция
+cov_fn <- function(h, temperatureArray) {
+  var = (sum(temperatureArray)/ length(temperatureArray));
+  n = (length(temperatureArray) - h);
+  r = 0;
+  for(s in 1:n){
+    r = r + (temperatureArray[(s+h)] - var) * (temperatureArray[s] - var) / n
+  }
+  return(r);
+}
+
+covariationTable = data.table::data.table(lag = 0:(lag_length - 1), covariation = rep(0, lag_length));
+
+for(arg in covariationTable$lag) {
+  covariationTable$covariation[arg + 1] = cov_fn(arg, input_table$temperature)
+}
+
+
+ggplot(data = covariationTable, aes(x = lag, y=covariation), ylab("covariance")) + 
+  geom_line(size = 1.4, color="black")
+
+```
+
+
+```{r}
+#выборочная семивариограмма
+semivariogram_fn <- function(h, temperatureArray) {
+  n = (length(temperatureArray) - h);
+  r = 0;
+  for(s in 1:n){
+    r = r + (((temperatureArray[(s+h)]) - (temperatureArray[s]))^2)
+  }
+  r = r/(n*2)
+  return(r);
+}
+
+semivariogramTable = data.table::data.table(lag = 0:(lag_length - 1), semivariogram = rep(0, lag_length));
+for(arg in semivariogramTable$lag) {
+  semivariogramTable$semivariogram[arg + 1] = semivariogram_fn(arg, input_table$temperature)
+}
+
+ggplot(data = semivariogramTable, aes(x = lag, y=semivariogram)) + 
+  geom_line(size = 1.4, color="black")
+
+```
