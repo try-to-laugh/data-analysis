@@ -42,10 +42,14 @@ temperatyre_ecesss = (kurtosis(input_table$temperature) - 3)
 ```
 
 ```{r}
+print(c('средние', temp_mean))
+print(c('минимум', temp_min_value))
+print(c('максимум', temp_max_value))
 print(c('дисперсия', temp_dispersion))
 print(c('коэффициент вариации', temp_variation_coef))
 print(c('коэффициент эксцесса', temperatyre_ecesss))
 print(c('коэффициент ассиметрии', temperatyre_assymetric_coef))
+
 
 ```
 
@@ -133,6 +137,7 @@ regression <- lm(temperature ~ arg, regression_table)
 print('коэффициенты линейной регрессии')
 print(regression$coefficients)
 ```
+
 ```{r}
 lag_length <- round(length(input_table$temperature) * 2 / 3)
 ```
@@ -156,7 +161,10 @@ ggplot(data = driftTable, aes(x = lag, y=drift)) + geom_line(size = 1.4, color="
 
 ```{r}
 #тесты стационарность
-adf.test(input_table$temperature)
+adf.test(input_table$temperature, k = 1)
+print('-------------------------')
+
+kpss.test(input_table$temperature)
 ```
 ```{r}
 #выборочная ковариационная функция
@@ -204,3 +212,52 @@ ggplot(data = semivariogramTable, aes(x = lag, y=semivariogram)) +
   geom_line(size = 1.4, color="black")
 
 ```
+
+```{r}
+#проверка на однородность
+
+#предполагаем, что взяли по полам
+
+#Фишер-Снедекор(F - распределение) через проверку дисперсий
+n1 <- input_table$temperature[1:round(length(input_table$temperature)/2)]
+n2 <- input_table$temperature[(round(length(input_table$temperature)/2) +1):length(input_table$temperature)]
+
+n1_imp_disp <- var(n1)
+n2_imp_disp <- var(n2)
+
+n1_mean <- mean(n1)
+n2_mean <- mean(n2)
+
+fs_sn =  max(c(n1_imp_disp, n2_imp_disp))/min(c(n1_imp_disp, n2_imp_disp))
+print(c('F_набл',fs_sn))
+
+#(Распределение Стьюдента) проверка через сравнение мат ожиданий
+#st_cr = ((n1_mean - n2_mean) / (((length(n1) - 1) * n1_imp_disp + (length(n2 - 1))*n2_imp_disp)**1/2)) * (((length(n1) * length(n2) * (length(n1) + length(n2) - 2))/(length(n1) + length(n2)))**1/2)
+
+t.test(n1,n2)
+
+```
+
+
+```{r}
+rg <- function(a, b, x) {
+  return(a*x + b)
+}
+
+
+diff_table <- data.table::data.table(year = rep(0, length(input_table$temperature)), temperature = rep(0,length(input_table$temperature)))
+
+for(index in 1:(length(input_table$temperature))) {
+  diff_table$temperature[index] = input_table$temperature[index] - rg(0.06 , 18.76, index);
+  diff_table$year[index] = input_table$year[index]
+}
+```
+
+
+
+```{r}
+#input_table = diff_table
+```
+
+
+
